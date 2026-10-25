@@ -35,7 +35,7 @@ class deviceHeaterCoap extends AirDevice {
       } else {
         values2 = 100; // on
       }
-      this.setStateCoap("D03105", values2, this.getSettings());
+      await this.setStateCoap("D03105", values2, this.getSettings());
 
       return value;
     });
@@ -132,20 +132,20 @@ class deviceHeaterCoap extends AirDevice {
       } else {
         values = 0;
       }
-      this.setStateCoap("D03130", values, this.getSettings());
+      await this.setStateCoap("D03130", values, this.getSettings());
       return value;
     });
 
     this.registerCapabilityListener('swing', async (value) => {
       this.log('swing ' + value);
-      this.setStateCoap("D0320F", Number(value), this.getSettings());
+      await this.setStateCoap("D0320F", Number(value), this.getSettings());
       return value;
     });
 
 
     this.registerCapabilityListener('timer', async (value) => {
       let model = this.getCapabilityValue('product')
-      this.setStateCoap("D03110", Number(value), this.getSettings());
+      await this.setStateCoap("D03110", Number(value), this.getSettings());
       return value;
     });
 
@@ -183,6 +183,7 @@ class deviceHeaterCoap extends AirDevice {
    * onDeleted is called when the user deleted the device.
    */
   async onDeleted() {
+    this.stopAirCoapDevice();
     this.log('deviceHeaterCoap has been deleted');
     // this.homey.clearInterval(timer);
   }

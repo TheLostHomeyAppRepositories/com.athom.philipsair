@@ -1,5 +1,3 @@
-const { resolve } = require("path");
-
 (function () {
 
     let philipsairCoap = exports;
@@ -12,8 +10,6 @@ const { resolve } = require("path");
 
     let sharedKey = 'JiangPan';
 
-    let statusCounter = 0;
-    let controlCounter = 0;
 
     function decodeCounter(encodedCounter) {
         let counterUpperCase = encodedCounter.toUpperCase();
@@ -86,33 +82,16 @@ const { resolve } = require("path");
     // active functions()  -------------------------------------  active functions()  --------------------------------------------
 
     philipsairCoap.getCurrentStatusDataCoap = function getCurrentStatusDataCoap(settings, device) {
-        console.log("settings " + JSON.stringify(settings));
-        return new Promise(async (resolve, reject) => {
-            await getCurrentDataCoap(settings, device, (error, jsonobj) => {
-                if (jsonobj) {
-                    console.log('getCurrentDataCoap res ', jsonobj)
-                    resolve(jsonobj);
-                } else {
-                    console.log('2: ' + error);
-                    reject(error);
-                }
-            });
-        }).catch(reason => console.log('1: ' + reason));
+        return new Promise((resolve, reject) => {
+            getCurrentDataCoap(settings, device, (error, jsonobj) => {
+                if (error) reject(error);
+                else resolve(jsonobj);
+            }).catch(reject);
+        });
     }
 
     philipsairCoap.setValueAirDataCoap = function setValueAirDataCoap(key, value, settings, device) {
-        console.log("key " + key)
-        console.log("value " + value)
-        console.log("settings " + JSON.stringify(settings));
-        return new Promise((resolve, reject) => {
-            setValueDataCoap(key, value, settings, device, (error, jsonobj) => {
-                if (jsonobj) {
-                    resolve(jsonobj);
-                } else {
-                    reject(error);
-                }
-            });
-        }).catch(reason => console.log('1: ' + reason));
+        return setValueDataCoap(key, value, settings, device);
     }
 
     // sleep time expects milliseconds
@@ -121,189 +100,165 @@ const { resolve } = require("path");
     }
 
     let newTimeout = (handler, delay) => {
-        let id = setTimeout(handler, delay), clear = clearTimeout.bind(null, id);
-        return { id, clear, trigger: () => (clear(), handler()) };
+        let active = true;
+        let id;
+        const clear = () => {
+            active = false;
+            clearTimeout(id);
+        };
+        const trigger = () => {
+            if (!active) return;
+            clear();
+            handler();
+        };
+        id = setTimeout(trigger, delay);
+        return { id, clear, trigger };
     };
 
     async function getCurrentDataCoap(settings, device, callback) {
-
-        if (settings.add_delay == true) {
-            console.log("add 60 sec delay");
-            await sleep(60000);
-        } else {
-            console.log("no delay");
-        }
-
-        console.log("getCurrentDataCoap " + settings.ipkey);
-        let target = new origin.Origin('coap:', settings.ipkey, 5683);
-        let targetString = 'coap://' + settings.ipkey + ':5683';
-
-        let coap;
-        if (device.getClient()) {
-            coap = device.getClient();
-            coap.reset(target);
-        } else {
-            coap = coapclass.CoapClient;
-        }
-
-        let jsonStatus = null;
-
-        coap.request(targetString + '/sys/dev/sync', 'post',
-            Buffer.from(encodeCounter(statusCounter, 8)), { keepAlive: true })
-            .then(response => {
-                if (response.payload) {
-                    const payload = response.payload.toString('utf-8');
-                    controlCounter = decodeCounter(payload);
-                    // console.log(controlCounter);
-                } else {
-                    let error = new Error('No response received for sync call. Cannot proceed, is coap://' + settings.ipkey + ':5683 up');
-                    // coap.reset(target);
-                    return callback(error, null);
-                    // throw new Error('No response received for sync call. Cannot proceed, is coap://'+settings.ipkey+':5683 up');
-                }
-            }).catch(err => {
-                console.log(err);
-                let error = new Error('catch: No response received for sync call. Cannot proceed, is coap://' + settings.ipkey + ':5683 up');
-                coap.reset(target);
-                return callback(error, null);
-                // throw new Error('No response received for sync call. Cannot proceed, is coap://'+settings.ipkey+':5683 up');
-            });
-
-        const connectResult = await coap.tryToConnect(target);
-
-        console.log("tryToConnect " + connectResult);
+        let statusCounter = device.coapStatusCounter || 0;
+        const target = new origin.Origin('coap:', settings.ipkey, 5683);
+        const targetString = 'coap://' + settings.ipkey + ':5683';
+        const coap = device.getClient() || coapclass.CoapClient;
         device.setClient(coap);
-
-        await coap.observe(targetString + '/sys/dev/status', 'get', resp => {
-            if (resp.payload) {
-                const response = resp.payload.toString('utf-8');
-                const encodedCounter = response.substring(0, 8);
-                let counter = decodeCounter(encodedCounter);
-                console.log("counter " + counter);
-                const hash = response.substring(response.length - 64);
-                const encodedMessageAndCounter = response.substring(0, response.length - 64);
-
-                // console.log(encodedMessageAndCounter);
-                const hashedMessage = Buffer.from(toSha256(encodedMessageAndCounter)).toString('hex').toUpperCase();
-                console.log("statusCounter " + statusCounter);
-                if (counter < 1 || counter > 2000000000 ||
-                    ((counter < statusCounter && statusCounter < 2000000000 - 10) ||
-                        ((counter > statusCounter + 10 && counter < 2000000000) ||
-                            (2000000000 - statusCounter < 10 && counter < statusCounter &&
-                                (10 - (2000000000 - statusCounter)) + 1 < counter && counter < statusCounter)))) {
-                    console.log('Invalid message id');
-                    // throw new Error('Invalid message id');
-                }
-                if (hash !== hashedMessage) {
-                    console.log('Invalid message hash');
-                    throw new Error('Invalid message hash');
-                }
-                if (counter >= 2000000000) {
-                    counter = 1;
-                }
-
-                statusCounter = counter;
-
-                let keyAndIv = toMD5(sharedKey + encodedCounter).toString('hex').toUpperCase();
-                // console.log("keyAndIv " + keyAndIv);
-                const secretKey = keyAndIv.substring(0, keyAndIv.length / 2);
-                // console.log("secret " + secretKey);
-                const iv = keyAndIv.substring(keyAndIv.length / 2, keyAndIv.length);
-                // console.log("iv " + iv);
-
-                const encodedMessage = response.substring(8, response.length - 64);
-                if (encodedMessage.length % 16 !== 0) {
-                    console.log("Encoded message length is not a multiple of 16 bytes:", encodedMessage.length);
-                    throw new Error('Message corrupted 2: ' + encodedMessage.length);
-                }
-
-                let payload = new Buffer.from(encodedMessage, 'hex');
-                console.log("Payload length:", payload.length);
-                if (payload.length % 16 !== 0) {
-                    console.log("Payload length is not a multiple of 16 bytes:", payload.length);
-                    //throw new Error('Message corrupted 3: ' + payload.length);
-                } else {
-                    let data = aes_decrypt2(payload, Buffer.from(secretKey, 'utf-8'), Buffer.from(iv, 'utf-8'));
-                    let dataText = aesjs.utils.utf8.fromBytes(data);
-
-                    try {
-                        jsonStatus = clean(dataText).state.reported;
-                        console.log(jsonStatus);
-                        device.handleDeviceStatus(jsonStatus, settings);
-                    } catch {
-                        // ignore, not valid json
-                    }
-                }
-
-            }
-
-        }, undefined, {
-            confirmable: false, // we expect no answer here in the typical coap way.
-            retransmit: false
-        }).then(() => {
-            // TODO: nothing?
-        }).catch(function (error) {
-            console.log(error);
-            console.log('observe stopped');
-
-        });
-
-        let timeoutId = newTimeout(function () {
-            let response = {
-                status: jsonStatus
-            };
-            coap.stopObserving('coap://' + settings.ipkey + ':5683/sys/dev/status');
-
-            console.log('---------timeout----------');
-            if (jsonStatus != null) {
-                return callback(null, response);
-            } else {
-                return callback(new Error('No response received'), null);
-            }
+        let jsonStatus = null;
+        let finished = false;
+        let delayId;
+        let resumeDelay;
+        const finish = (error) => {
+            if (finished) return;
+            finished = true;
+            timeoutId.clear();
+            clearTimeout(delayId);
+            if (resumeDelay) resumeDelay();
+            coap.stopObserving(targetString + '/sys/dev/status');
+            // Discard failed requests so the next attempt cannot reuse a rejected promise.
+            if (error) coap.reset(target);
+            callback(error, error ? null : { status: jsonStatus });
+        };
+        const timeoutId = newTimeout(() => {
+            finish(jsonStatus === null ? new Error('No response received') : null);
         }, 600000);
-
-
+        timeoutId.cancel = () => {
+            finish(null);
+            coap.reset(target);
+        };
         device.setTimeoutId(timeoutId);
+
+        try {
+            if (settings.add_delay === true) {
+                await new Promise(resolve => {
+                    resumeDelay = resolve;
+                    delayId = setTimeout(resolve, 60000);
+                });
+            }
+            if (finished) return;
+            coap.reset(target);
+            const connectResult = await coap.tryToConnect(target);
+            if (finished) return;
+            if (connectResult !== true) throw new Error('CoAP connection failed: ' + connectResult);
+            const response = await coap.request(targetString + '/sys/dev/sync', 'post',
+                Buffer.from(encodeCounter(statusCounter, 8)), { keepAlive: true });
+            if (finished) return;
+            if (!response || !response.payload || !response.payload.length) {
+                throw new Error('No response received for sync call: ' + targetString);
+            }
+
+            await coap.observe(targetString + '/sys/dev/status', 'get', resp => {
+                if (finished) return;
+                try {
+                    if (resp.payload) {
+                        const response = resp.payload.toString('utf-8');
+                        const encodedCounter = response.substring(0, 8);
+                        let counter = decodeCounter(encodedCounter);
+                        console.log("counter " + counter);
+                        const hash = response.substring(response.length - 64);
+                        const encodedMessageAndCounter = response.substring(0, response.length - 64);
+
+                        // console.log(encodedMessageAndCounter);
+                        const hashedMessage = Buffer.from(toSha256(encodedMessageAndCounter)).toString('hex').toUpperCase();
+                        console.log("statusCounter " + statusCounter);
+                        if (counter < 1 || counter > 2000000000 ||
+                            (statusCounter !== 0 && ((counter < statusCounter && statusCounter < 2000000000 - 10) ||
+                                ((counter > statusCounter + 10 && counter < 2000000000) ||
+                                    (2000000000 - statusCounter < 10 && counter < statusCounter &&
+                                        (10 - (2000000000 - statusCounter)) + 1 < counter && counter < statusCounter))))) {
+                            console.log('Invalid message id');
+                            // throw new Error('Invalid message id');
+                        }
+                        if (hash !== hashedMessage) {
+                            console.log('Invalid message hash');
+                            throw new Error('Invalid message hash');
+                        }
+                        if (counter >= 2000000000) {
+                            counter = 1;
+                        }
+
+                        statusCounter = counter;
+                        device.coapStatusCounter = counter;
+
+                        let keyAndIv = toMD5(sharedKey + encodedCounter).toString('hex').toUpperCase();
+                        // console.log("keyAndIv " + keyAndIv);
+                        const secretKey = keyAndIv.substring(0, keyAndIv.length / 2);
+                        // console.log("secret " + secretKey);
+                        const iv = keyAndIv.substring(keyAndIv.length / 2, keyAndIv.length);
+                        // console.log("iv " + iv);
+
+                        const encodedMessage = response.substring(8, response.length - 64);
+                        if (encodedMessage.length % 16 !== 0) {
+                            console.log("Encoded message length is not a multiple of 16 bytes:", encodedMessage.length);
+                            throw new Error('Message corrupted 2: ' + encodedMessage.length);
+                        }
+
+                        let payload = new Buffer.from(encodedMessage, 'hex');
+                        console.log("Payload length:", payload.length);
+                        if (payload.length % 16 !== 0) {
+                            console.log("Payload length is not a multiple of 16 bytes:", payload.length);
+                            //throw new Error('Message corrupted 3: ' + payload.length);
+                        } else {
+                            let data = aes_decrypt2(payload, Buffer.from(secretKey, 'utf-8'), Buffer.from(iv, 'utf-8'));
+                            let dataText = aesjs.utils.utf8.fromBytes(data);
+
+                            try {
+                                jsonStatus = clean(dataText).state.reported;
+                                console.log(jsonStatus);
+                                device.handleDeviceStatus(jsonStatus, settings);
+                            } catch {
+                                // ignore, not valid json
+                            }
+                        }
+
+                    }
+
+                } catch (error) {
+                    finish(error);
+                }
+            }, undefined, {
+                confirmable: false, // we expect no answer here in the typical coap way.
+                retransmit: false
+            });
+        } catch (error) {
+            finish(error);
+        }
     }
 
-    async function setValueDataCoap(key, value, settings, device, callback) {
-        console.log("setValueDataCoap ");
-        let target = new origin.Origin('coap:', settings.ipkey, 5683);
-        let targetString = 'coap://' + settings.ipkey + ':5683';
-        let jsonStatus = null;
-
-        let coap = device.getClient();
-
-        await coap.stopObserving('coap://' + settings.ipkey + ':5683/sys/dev/status');
-
-        // await coap.reset(target);
-        coap = coapclass.CoapClient;
-
-        console.log('-------------------')
-        coap.request(targetString + '/sys/dev/sync', 'post',
-            Buffer.from(encodeCounter(statusCounter, 8)),
-            { keepAlive: false })
-            .then(response => {
-                // console.log(response);
-                if (response.payload) {
-                    const payload = response.payload.toString('utf-8');
-                    controlCounter = decodeCounter(payload);
-                    console.log(controlCounter);
-                } else {
-                    let error = new Error('No response received for call. Cannot proceed, is coap://' + settings.ipkey + ':5683 up');
-                    return callback(error, null);
-                }
-            }).catch(err => {
-                let error = new Error('No response received for call. Cannot proceed, is coap://' + settings.ipkey + ':5683 up');
-                return callback(error, null);
-                console.log(err);
-            });
-
-        await coap.tryToConnect(target);
-        console.log('tryToConnect ');
-
-        sleep(2000).then(() => {
-            console.log('-------------------')
+    async function setValueDataCoap(key, value, settings, device) {
+        const target = new origin.Origin('coap:', settings.ipkey, 5683);
+        const targetString = 'coap://' + settings.ipkey + ':5683';
+        const coap = device.getClient() || coapclass.CoapClient;
+        const observation = device.getTimeoutId();
+        try {
+            coap.stopObserving(targetString + '/sys/dev/status');
+            const connectResult = await coap.tryToConnect(target);
+            if (connectResult !== true) throw new Error('CoAP connection failed: ' + connectResult);
+            const syncResponse = await coap.request(targetString + '/sys/dev/sync', 'post',
+                Buffer.from(encodeCounter(device.coapStatusCounter || 0, 8)), { keepAlive: false });
+            if (!syncResponse || !syncResponse.payload || !syncResponse.payload.length) {
+                throw new Error('No response received for sync call: ' + targetString);
+            }
+            let controlCounter = decodeCounter(syncResponse.payload.toString('utf-8'));
+            await sleep(2000);
+            if (device.coapStopped) throw new Error('Device has been deleted');
 
             let message = {
                 state: {
@@ -339,36 +294,18 @@ const { resolve } = require("path");
             const hash = Buffer.from(toSha256(result)).toString('hex').toUpperCase();
 
             result = encodedCounter + encodedMessage + hash;
-            console.log(targetString);
-            coap.request(targetString + '/sys/dev/control', 'post',
-                Buffer.from(result), { keepAlive: false })
-                .then(response => {
-                    console.log(response);
-                    if (response.payload) {
-                        const payload = response.payload.toString('utf-8');
-                        console.log(payload);
-                        jsonStatus = payload
-                    }
-                }).catch(err => {
-                    console.log(err);
-                });
-            console.log('-------------------');
-        });
-
-        sleep(4000).then(() => {
-            console.log('-------------------');
-            let response = {
-                status: jsonStatus
-            };
-            // coap.reset(target);
-            console.log("intervalId: ", device.getTimeoutId());
-            device.getTimeoutId().trigger();
-            // clearTimeout(device.getTimeoutId());
-            if (jsonStatus != null) {
-                return callback(null, response);
-            } else {
-                return callback(new Error('No response received'), null);
+            const response = await coap.request(targetString + '/sys/dev/control', 'post',
+                Buffer.from(result), { keepAlive: false });
+            if (!response || !response.payload || !response.payload.length) {
+                throw new Error('No response received for control call: ' + targetString);
             }
-        });
+            return { status: response.payload.toString('utf-8') };
+        } catch (error) {
+            coap.reset(target);
+            throw error;
+        } finally {
+            // Complete only the observation interrupted by this command, once.
+            if (observation) observation.trigger();
+        }
     }
 })();

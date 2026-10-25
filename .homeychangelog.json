@@ -1,5 +1,8 @@
 {
-    "1.0.80": {
+  "1.0.81": {
+    "en": "fixing top cpu and retry loop"
+  },     
+  "1.0.80": {
     "en": "adding devices "
   },   
    "1.0.78": {

@@ -51,7 +51,7 @@ class deviceCoap2 extends AirDevice {
           values2 = 100; // on
         }
         if ( values2 == 0 || values2 == 0 ) {
-          this.setStateCoap("D03105", values2, this.getSettings());
+          await this.setStateCoap("D03105", values2, this.getSettings());
         }
       } else if (newCoapDevices3.includes(model)) {
         let values2
@@ -67,20 +67,20 @@ class deviceCoap2 extends AirDevice {
           await this.setStateCoap("D03105", values2, this.getSettings());
         }
       } else {        
-        this.setStateCoap("aqil", value, this.getSettings());
+        await this.setStateCoap("aqil", value, this.getSettings());
       }
       return value;
     });
 
     this.registerCapabilityListener('light_ambient_mode', async (value) => {
       let model = this.getCapabilityValue('product')      
-      this.setStateCoap("D03137", Number(value), this.getSettings());
+      await this.setStateCoap("D03137", Number(value), this.getSettings());
       return value;
     });
 
     this.registerCapabilityListener('light_mode', async (value) => {
       let model = this.getCapabilityValue('product')      
-      this.setStateCoap("D03135", Number(value), this.getSettings());
+      await this.setStateCoap("D03135", Number(value), this.getSettings());
       return value;
     });
     
@@ -92,7 +92,7 @@ class deviceCoap2 extends AirDevice {
       } else {
         values = "P";
       }
-      this.setStateCoap("func", values, this.getSettings());
+      await this.setStateCoap("func", values, this.getSettings());
       return value;
     });
 
@@ -100,21 +100,21 @@ class deviceCoap2 extends AirDevice {
       let model = this.getCapabilityValue('product')
       const newCoapDevices2 = ['AC3737/10','AC3421/13','HU1509/00','HU1510/03','HU5710/00','AC3420/10','HU4209/00']  
       if (newCoapDevices2.includes(model)) {
-        this.setStateCoap("D03128",  Number(value), this.getSettings());
+        await this.setStateCoap("D03128",  Number(value), this.getSettings());
       } else {
-        this.setStateCoap("rhset", Number(value), this.getSettings());
+        await this.setStateCoap("rhset", Number(value), this.getSettings());
       }        
 
       return value;
     });
 
     this.registerCapabilityListener('button_lights', async (value) => {
-      this.setStateCoap("uil", value, this.getSettings());
+      await this.setStateCoap("uil", value, this.getSettings());
       return value;
     });
 
     this.registerCapabilityListener('purifier_mode', async (value) => {
-      this.setStateCoap("mode", value, this.getSettings());
+      await this.setStateCoap("mode", value, this.getSettings());
       return value;
     });
 
@@ -127,7 +127,7 @@ class deviceCoap2 extends AirDevice {
       } else {
         values = 0;
       }
-      this.setStateCoap("D03130", values, this.getSettings());
+      await this.setStateCoap("D03130", values, this.getSettings());
       return value;
     });
 
@@ -135,9 +135,9 @@ class deviceCoap2 extends AirDevice {
       let model = this.getCapabilityValue('product')
       const newCoapDevices2 =  ['AC3737/10','AMF765/10','AC3421/13','AC4236/14','AMF870/15','HU1510/03','HU5710/00','AC3420/10','HU4209/00']  
       if (newCoapDevices2.includes(model)) {
-        this.setStateCoap("D0312A", Number(value), this.getSettings());   
+        await this.setStateCoap("D0312A", Number(value), this.getSettings());
       } else {     
-         this.setStateCoap("ddp", value, this.getSettings());
+         await this.setStateCoap("ddp", value, this.getSettings());
       }
       return value;
     });
@@ -152,14 +152,14 @@ class deviceCoap2 extends AirDevice {
         } else {
           values = 0;
         }
-        this.setStateCoap("D03102", values, this.getSettings());
+        await this.setStateCoap("D03102", values, this.getSettings());
       } else {
         if (value == true) {
           values = '1';
         } else {
           values = '0';
         }
-        this.setStateCoap("pwr", values, this.getSettings());
+        await this.setStateCoap("pwr", values, this.getSettings());
       }      
       return value;
     });
@@ -174,9 +174,9 @@ class deviceCoap2 extends AirDevice {
         } else {
           values = 0;
         }
-        this.setStateCoap("D03103", values, this.getSettings());
+        await this.setStateCoap("D03103", values, this.getSettings());
       }  else {  
-        this.setStateCoap("cl", value, this.getSettings());
+        await this.setStateCoap("cl", value, this.getSettings());
       }
       return value;
     });
@@ -189,47 +189,44 @@ class deviceCoap2 extends AirDevice {
 
       if (newCoapDevices2.includes(model)) {
         if (value == "1") {
-          this.setStateCoap("D0310C", 1, this.getSettings());
+          await this.setStateCoap("D0310C", 1, this.getSettings());
         }
         if (value == "2") {
-          this.setStateCoap("D0310C", 2, this.getSettings());
+          await this.setStateCoap("D0310C", 2, this.getSettings());
         }
         if (value == "s") {
-          this.setStateCoap("D0310C", 17, this.getSettings());
+          await this.setStateCoap("D0310C", 17, this.getSettings());
         }
         if (value == "AUTO") {
-          this.setStateCoap("D0310C", 0, this.getSettings());
+          await this.setStateCoap("D0310C", 0, this.getSettings());
         }
         if (value == "t") {
-          this.setStateCoap("D0310C", 18, this.getSettings());
+          await this.setStateCoap("D0310C", 18, this.getSettings());
         }           
       } else {
         if (value == "AUTO") {
           // auto
           if (newCoapDevices.includes(model)) {
-            this.setStateCoap("mode", "AG", this.getSettings());
+            await this.setStateCoap("mode", "AG", this.getSettings());
           } else {
-            this.setStateCoap("mode", "P", this.getSettings());
+            await this.setStateCoap("mode", "P", this.getSettings());
           }
         } else {
           if (value == "s" || value == "t" || value == "as") {
             // turbo / sleep
             if (newCoapDevices.includes(model)) {
-              this.setStateCoap("mode", value.toUpperCase(), this.getSettings());
-              sleep(2000).then(() => {
-                this.setStateCoap("om", value, this.getSettings());
-              });
+              await this.setStateCoap("mode", value.toUpperCase(), this.getSettings());
+              await sleep(2000);
+              await this.setStateCoap("om", value, this.getSettings());
             } else {
-              this.setStateCoap("mode", "M", this.getSettings());
-              sleep(2000).then(() => {
-                this.setStateCoap("om", value, this.getSettings());
-              });
+              await this.setStateCoap("mode", "M", this.getSettings());
+              await sleep(2000);
+              await this.setStateCoap("om", value, this.getSettings());
             }
           } else {
-            this.setStateCoap("mode", "M", this.getSettings());
-            sleep(2000).then(() => {
-              this.setStateCoap("om", value, this.getSettings());
-            });
+            await this.setStateCoap("mode", "M", this.getSettings());
+            await sleep(2000);
+              await this.setStateCoap("om", value, this.getSettings());
           }
         }
       }
@@ -242,9 +239,9 @@ class deviceCoap2 extends AirDevice {
       let model = this.getCapabilityValue('product')      
       const newCoapDevices2 = ['AC3737/10','AMF765/10','AC3421/13','AC4236/14','AMF870/15','HU1509/00','HU1510/03','HU5710/00','AC3420/10','HU4209/00','HU4209/00']        
       if (newCoapDevices2.includes(model)) {
-        this.setStateCoap("D03110", Number(value), this.getSettings());
+        await this.setStateCoap("D03110", Number(value), this.getSettings());
       } else {  
-        this.setStateCoap("dt", value, this.getSettings());
+        await this.setStateCoap("dt", value, this.getSettings());
       }  
       return value;
     });
@@ -284,6 +281,7 @@ class deviceCoap2 extends AirDevice {
    * onDeleted is called when the user deleted the device.
    */
   async onDeleted() {
+    this.stopAirCoapDevice();
     this.log('deviceCoap2 has been deleted');
     // this.homey.clearInterval(timer);    
   }

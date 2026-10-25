@@ -21,9 +21,9 @@ class MyApp extends Homey.App {
 
 
     let purifierModeAction = this.homey.flow.getActionCard('purifier_mode');
-    purifierModeAction.registerRunListener((args, state) => {
+    purifierModeAction.registerRunListener(async (args, state) => {
       if (coapDevices.includes(args.device.constructor.name)) {
-        args.device.setStateCoap("mode", args.mode, args.device.getSettings());
+        await args.device.setStateCoap("mode", args.mode, args.device.getSettings());
       } else {
         let values = { "mode": args.mode }
         args.device.setState(JSON.stringify(values), args.device.getSettings());
@@ -32,7 +32,7 @@ class MyApp extends Homey.App {
     })
 
     let childlockAction = this.homey.flow.getActionCard('child_lock');
-    childlockAction.registerRunListener((args, state) => {
+    childlockAction.registerRunListener(async (args, state) => {
       if (coapDevices.includes(args.device.constructor.name)) {
         let model = args.device.getCapabilityValue('product')
         if (newCoapDevices3.includes(model)) {
@@ -42,9 +42,9 @@ class MyApp extends Homey.App {
           } else {
             values = 0;
           }
-          args.device.setStateCoap("D03103", values, args.device.getSettings());
+          await args.device.setStateCoap("D03103", values, args.device.getSettings());
         } else {
-          args.device.setStateCoap("cl", args.mode, args.device.getSettings());
+          await args.device.setStateCoap("cl", args.mode, args.device.getSettings());
         }
       } else {
         let values = { "cl": args.mode }
@@ -54,21 +54,21 @@ class MyApp extends Homey.App {
     })
 
     let beepAction = this.homey.flow.getActionCard('beep');
-    beepAction.registerRunListener((args, state) => {
+    beepAction.registerRunListener(async (args, state) => {
       let values;
       if (args.mode == true) {
         values = 100;
       } else {
         values = 0;
       }
-      args.device.setStateCoap("D03130", values, args.device.getSettings());
+      await args.device.setStateCoap("D03130", values, args.device.getSettings());
       return Promise.resolve(true);
     })
 
     let tempAction = this.homey.flow.getActionCard('target_temperature');
-    tempAction.registerRunListener((args, state) => {
-      args.device.setStateCoap("D0310A", 3, args.device.getSettings());
-      args.device.setStateCoap("D0310E", args.value, args.device.getSettings());      
+    tempAction.registerRunListener(async (args, state) => {
+      await args.device.setStateCoap("D0310A", 3, args.device.getSettings());
+      await args.device.setStateCoap("D0310E", args.value, args.device.getSettings());
       return Promise.resolve(true);
     })
 
@@ -82,9 +82,9 @@ class MyApp extends Homey.App {
     //     } else {
     //       values = 0;
     //     }
-    //     this.setStateCoap("D03103", values, this.getSettings());
+    //     await this.setStateCoap("D03103", values, this.getSettings());
     //   }  else {  
-    //     this.setStateCoap("cl", value, this.getSettings());
+    //     await this.setStateCoap("cl", value, this.getSettings());
     //   }
     //   return value;
     // });
@@ -103,8 +103,8 @@ class MyApp extends Homey.App {
         await args.device.setCapabilityValue('measure_power', 1900);      
       }
       if (args.mode == "MEDIUM") {
-        await  args.device.setStateCoap("D0310A", 3,  args.device.getSettings());
-        await  args.device.setStateCoap("D0310C", 67,  args.device.getSettings());
+        await  await args.device.setStateCoap("D0310A", 3,  args.device.getSettings());
+        await  await args.device.setStateCoap("D0310C", 67,  args.device.getSettings());
         await  args.device.setCapabilityValue('measure_power', 1525);             
       }       
       if (args.mode == "LOW") {
@@ -128,8 +128,8 @@ class MyApp extends Homey.App {
         await args.device.setStateCoap("D0310C", 65, args.device.getSettings());
       }
       if (args.mode == "MEDIUM") {
-        await  args.device.setStateCoap("D0310A", 3,  args.device.getSettings());
-        await  args.device.setStateCoap("D0310C", 67,  args.device.getSettings());
+        await  await args.device.setStateCoap("D0310A", 3,  args.device.getSettings());
+        await  await args.device.setStateCoap("D0310C", 67,  args.device.getSettings());
       }         
       if (args.mode == "LOW") {
         await args.device.setStateCoap("D0310A", 3, args.device.getSettings());
@@ -218,7 +218,7 @@ class MyApp extends Homey.App {
     })
 
     let lightIntensityAction = this.homey.flow.getActionCard('light_intensity');
-    lightIntensityAction.registerRunListener((args, state) => {
+    lightIntensityAction.registerRunListener(async (args, state) => {
       this.log('---');
       this.log(args.device.constructor.name);
       this.log('---');
@@ -231,9 +231,9 @@ class MyApp extends Homey.App {
         } else {
           values2 = 100; // on
         }
-        args.device.setStateCoap("D03105", values2, args.device.getSettings());
+        await args.device.setStateCoap("D03105", values2, args.device.getSettings());
       } else if (coapDevices.includes(args.device.constructor.name)) {
-        args.device.setStateCoap("aqil", parseInt(args.mode), args.device.getSettings());
+        await args.device.setStateCoap("aqil", parseInt(args.mode), args.device.getSettings());
       } else {
         let values = { "aqil": 50 };
         args.device.setState(JSON.stringify(values), args.device.getSettings());
@@ -246,12 +246,12 @@ class MyApp extends Homey.App {
     })
 
     let onAction = this.homey.flow.getActionCard('on');
-    onAction.registerRunListener((args, state) => {
+    onAction.registerRunListener(async (args, state) => {
       let model = args.device.getCapabilityValue('product')
       if (newCoapDevices2.includes(model)) {
-        args.device.setStateCoap("D03-02", "ON", args.device.getSettings());
+        await args.device.setStateCoap("D03-02", "ON", args.device.getSettings());
       } else if (newCoapDevices3.includes(model) || coapHeaterDevices.includes(args.device.constructor.name)) {
-        args.device.setStateCoap("D03102", 1, args.device.getSettings());
+        await args.device.setStateCoap("D03102", 1, args.device.getSettings());
         if (coapHeaterDevices.includes(args.device.constructor.name)) {
             const tokens = {
               'onoff': true
@@ -259,7 +259,7 @@ class MyApp extends Homey.App {
             this.homey.flow.getDeviceTriggerCard('onoff').trigger( args.device, tokens);            
         }  
       } else if (coapDevices.includes(args.device.constructor.name)) {
-        args.device.setStateCoap("pwr", "1", args.device.getSettings());
+        await args.device.setStateCoap("pwr", "1", args.device.getSettings());
       } else {
         let values = { "pwr": "1" }
         args.device.setState(JSON.stringify(values), args.device.getSettings());
@@ -268,12 +268,12 @@ class MyApp extends Homey.App {
     })
 
     let offAction = this.homey.flow.getActionCard('off');
-    offAction.registerRunListener((args, state) => {
+    offAction.registerRunListener(async (args, state) => {
       let model = args.device.getCapabilityValue('product')
       if (newCoapDevices2.includes(model)) {
-        args.device.setStateCoap("D03-02", "OFF", args.device.getSettings());
+        await args.device.setStateCoap("D03-02", "OFF", args.device.getSettings());
       } else if (newCoapDevices3.includes(model) || coapHeaterDevices.includes(args.device.constructor.name)) {
-        args.device.setStateCoap("D03102", 0, args.device.getSettings());
+        await args.device.setStateCoap("D03102", 0, args.device.getSettings());
         if (coapHeaterDevices.includes(args.device.constructor.name)) {
             args.device.setCapabilityValue('measure_power', 1);
             const tokens = {
@@ -283,7 +283,7 @@ class MyApp extends Homey.App {
         }  
 
       } else if (coapDevices.includes(args.device.constructor.name)) {
-        args.device.setStateCoap("pwr", "0", args.device.getSettings());
+        await args.device.setStateCoap("pwr", "0", args.device.getSettings());
       } else {
         let values = { "pwr": "0" }
         args.device.setState(JSON.stringify(values), args.device.getSettings());
@@ -292,9 +292,9 @@ class MyApp extends Homey.App {
     })
 
     let funcModeOnAction = this.homey.flow.getActionCard('func_mode_on');
-    funcModeOnAction.registerRunListener((args, state) => {
+    funcModeOnAction.registerRunListener(async (args, state) => {
       if (coapDevices.includes(args.device.constructor.name)) {
-        args.device.setStateCoap("func", "PH", args.device.getSettings());
+        await args.device.setStateCoap("func", "PH", args.device.getSettings());
       } else {
         let values = { "func": "PH" }
         args.device.setState(JSON.stringify(values), args.device.getSettings());
@@ -303,9 +303,9 @@ class MyApp extends Homey.App {
     })
 
     let funcModeOffAction = this.homey.flow.getActionCard('func_mode_off');
-    funcModeOffAction.registerRunListener((args, state) => {
+    funcModeOffAction.registerRunListener(async (args, state) => {
       if (coapDevices.includes(args.device.constructor.name)) {
-        args.device.setStateCoap("func", "P", args.device.getSettings());
+        await args.device.setStateCoap("func", "P", args.device.getSettings());
       } else {
         let values = { "func": "P" }
         args.device.setState(JSON.stringify(values), args.device.getSettings());

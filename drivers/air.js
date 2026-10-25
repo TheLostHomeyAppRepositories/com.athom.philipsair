@@ -63,26 +63,55 @@ export class AirDevice extends Homey.Device {
     async setStateCoap(key, value, settings) {
         this.log('setStateCoap: ' + key + ":" + value);
         this.log(settings);
-        philipsairCoap.setValueAirDataCoap(key, value, settings, this).then(data => {
-            this.log("-setValueCoapAirData-begin-");
-            this.log(data);
-            this.log("-setValueCoapAirData-end-");
-            return value
-        })
+        this.coapCommands = (this.coapCommands || 0) + 1;
+        const command = (this.coapCommandQueue || Promise.resolve()).catch(() => {}).then(() => {
+            if (this.coapStopped) throw new Error('Device has been deleted');
+            return philipsairCoap.setValueAirDataCoap(key, value, settings, this);
+        });
+        this.coapCommandQueue = command;
+        try {
+            await command;
+            return value;
+        } finally {
+            this.coapCommands--;
+        }
     }
 
-    observerAirCoapDevice() {
-        this.log("observerAirCoapDevice");
-        let settings = this.getSettings();
-        this.log(settings);
-        this.log("getCurrentStatusDataCoap");
-        philipsairCoap.getCurrentStatusDataCoap(settings, this).then(data => {
-            this.log("observerAirCoapDevice timeout");
+    async observerAirCoapDevice() {
+        if (this.coapStopped || this.coapObserving || this.coapRetryTimer) return;
+        if (this.coapCommands) {
+            this.scheduleAirCoapObserver(1000);
+            return;
+        }
+        this.coapObserving = true;
+        let delay = 1000;
+        try {
+            await philipsairCoap.getCurrentStatusDataCoap(this.getSettings(), this);
+            this.coapRetryCount = 0;
+        } catch (error) {
+            this.coapRetryCount = (this.coapRetryCount || 0) + 1;
+            delay = Math.min(5000 * Math.pow(2, Math.min(this.coapRetryCount - 1, 6)), 300000);
+            this.error('CoAP observation failed; retrying in ' + delay / 1000 + 's', error);
+        } finally {
+            this.coapObserving = false;
+            this.scheduleAirCoapObserver(delay);
+        }
+    }
+
+    scheduleAirCoapObserver(delay) {
+        if (this.coapStopped || this.coapRetryTimer) return;
+        this.coapRetryTimer = setTimeout(() => {
+            this.coapRetryTimer = null;
             this.observerAirCoapDevice();
-        }).catch(function (error) {
-            console.log(error);
-            this.observerAirCoapDevice();
-        });
+        }, delay);
+    }
+
+    stopAirCoapDevice() {
+        this.coapStopped = true;
+        clearTimeout(this.coapRetryTimer);
+        this.coapRetryTimer = null;
+        const observation = this.getTimeoutId();
+        if (observation && observation.cancel) observation.cancel();
     }
 
     conditionScoreIaqlToString(index) {
