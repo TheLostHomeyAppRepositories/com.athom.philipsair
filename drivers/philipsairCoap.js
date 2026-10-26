@@ -99,6 +99,42 @@
         return new Promise((resolve) => setTimeout(resolve, time));
     }
 
+    // Bound command traffic here; disable the library's separate retransmission loop.
+    async function requestCommandWithRetries(coap, target, url, payload, device) {
+        const maxAttempts = 3;
+        const timeoutMs = 10000;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            if (device.coapStopped) throw new Error('Device has been deleted');
+            try {
+                const response = await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error('CoAP command request timed out: ' + url));
+                        coap.reset(target);
+                    }, timeoutMs);
+                    Promise.resolve().then(() => coap.request(url, 'post', payload, {
+                        keepAlive: true,
+                        retransmit: false
+                    })).then(resolve, reject).finally(() => clearTimeout(timeout));
+                });
+                if (device.coapStopped) throw new Error('Device has been deleted');
+                if (response && response.code && response.code.major !== 2) {
+                    const error = new Error('CoAP command rejected: ' + response.code.toString());
+                    error.retryable = false;
+                    throw error;
+                }
+                if (!response || !response.payload || !response.payload.length) {
+                    throw new Error('No response payload for command request: ' + url);
+                }
+                return response;
+            } catch (error) {
+                if (device.coapStopped || error.retryable === false || attempt === maxAttempts) throw error;
+                coap.reset(target);
+                device.log('CoAP command request failed; retry ' + (attempt + 1) + '/' + maxAttempts + ': ' + url);
+                await sleep(attempt * 1000);
+            }
+        }
+    }
+
     let newTimeout = (handler, delay) => {
         let active = true;
         let id;
@@ -139,6 +175,7 @@
         const timeoutId = newTimeout(() => {
             finish(jsonStatus === null ? new Error('No response received') : null);
         }, 600000);
+        timeoutId.interrupt = () => finish(null);
         timeoutId.cancel = () => {
             finish(null);
             coap.reset(target);
@@ -249,10 +286,8 @@
         const observation = device.getTimeoutId();
         try {
             coap.stopObserving(targetString + '/sys/dev/status');
-            const connectResult = await coap.tryToConnect(target);
-            if (connectResult !== true) throw new Error('CoAP connection failed: ' + connectResult);
-            const syncResponse = await coap.request(targetString + '/sys/dev/sync', 'post',
-                Buffer.from(encodeCounter(device.coapStatusCounter || 0, 8)), { keepAlive: false });
+            const syncResponse = await requestCommandWithRetries(coap, target, targetString + '/sys/dev/sync',
+                Buffer.from(encodeCounter(device.coapStatusCounter || 0, 8)), device);
             if (!syncResponse || !syncResponse.payload || !syncResponse.payload.length) {
                 throw new Error('No response received for sync call: ' + targetString);
             }
@@ -294,8 +329,8 @@
             const hash = Buffer.from(toSha256(result)).toString('hex').toUpperCase();
 
             result = encodedCounter + encodedMessage + hash;
-            const response = await coap.request(targetString + '/sys/dev/control', 'post',
-                Buffer.from(result), { keepAlive: false });
+            const response = await requestCommandWithRetries(coap, target, targetString + '/sys/dev/control',
+                Buffer.from(result), device);
             if (!response || !response.payload || !response.payload.length) {
                 throw new Error('No response received for control call: ' + targetString);
             }
@@ -305,7 +340,7 @@
             throw error;
         } finally {
             // Complete only the observation interrupted by this command, once.
-            if (observation) observation.trigger();
+            if (observation) observation.interrupt();
         }
     }
 })();

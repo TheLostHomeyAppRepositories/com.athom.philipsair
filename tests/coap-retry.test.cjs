@@ -185,7 +185,11 @@ test('failed command sync propagates and never sends control', async () => {
         if (url.endsWith('/control')) f.calls.control++;
         throw new Error('sync failed');
     };
-    await assert.rejects(f.device.setStateCoap('pwr', '1', f.device.getSettings()), /sync failed/);
+    const failed = assert.rejects(f.device.setStateCoap('pwr', '1', f.device.getSettings()), /sync failed/);
+    await f.flush();
+    await f.advance(1000);
+    await f.advance(2000);
+    await failed;
     assert.equal(f.calls.control, 0);
     assert.equal(f.timers.size, 0);
 });
@@ -255,6 +259,115 @@ test('two purifiers keep independent counters for notifications, commands and re
     assert.ok(syncRequests.some(([url, payload]) => url.includes('192.168.1.172') && payload === '00000003'));
     bedroom.stopAirCoapDevice();
     kitchen.stopAirCoapDevice();
+    await f.flush();
+    assert.equal(f.timers.size, 0);
+});
+
+test('control retries once on transient failure, then stops after success', async () => {
+    const f = fixture();
+    const payloads = [];
+    f.coap.request = async (url, method, payload, options) => {
+        assert.equal(options.retransmit, false);
+        if (url.endsWith('/sync')) return { payload: Buffer.from('00000001') };
+        payloads.push(payload.toString());
+        if (payloads.length === 1) throw new Error('reply lost');
+        return { payload: Buffer.from('ok') };
+    };
+    const command = f.device.setStateCoap('cl', true, f.device.getSettings());
+    await f.flush();
+    await f.advance(2000);
+    assert.equal(payloads.length, 1);
+    await f.advance(1000);
+    await command;
+    assert.equal(payloads.length, 2);
+    assert.equal(payloads[0], payloads[1], 'Retry must preserve the encrypted command and counter');
+    await f.advance(60000);
+    assert.equal(payloads.length, 2);
+    assert.equal(f.timers.size, 0);
+});
+
+test('unanswered control stops after three timed attempts and does not requeue', async () => {
+    const f = fixture();
+    let attempts = 0;
+    f.coap.request = async url => {
+        if (url.endsWith('/sync')) return { payload: Buffer.from('00000001') };
+        attempts++;
+        return new Promise(() => {});
+    };
+    const failed = assert.rejects(f.device.setStateCoap('pwr', '0', f.device.getSettings()), /timed out/);
+    await f.flush();
+    await f.advance(2000);
+    assert.equal(attempts, 1);
+    await f.advance(10000);
+    await f.advance(1000);
+    assert.equal(attempts, 2);
+    await f.advance(10000);
+    await f.advance(2000);
+    assert.equal(attempts, 3);
+    await f.advance(10000);
+    await failed;
+    await f.advance(60000);
+    assert.equal(attempts, 3);
+    assert.equal(f.device.coapCommands, 0);
+    assert.equal(f.timers.size, 0);
+});
+
+test('unanswered command sync stops after three attempts without sending control', async () => {
+    const f = fixture();
+    let attempts = 0;
+    f.coap.request = async url => {
+        assert.ok(url.endsWith('/sync'));
+        attempts++;
+        return new Promise(() => {});
+    };
+    const failed = assert.rejects(f.device.setStateCoap('pwr', '0', f.device.getSettings()), /timed out/);
+    await f.flush();
+    for (const delay of [10000, 1000, 10000, 2000, 10000]) await f.advance(delay);
+    await failed;
+    assert.equal(attempts, 3);
+    assert.equal(f.timers.size, 0);
+});
+
+test('an explicit device rejection is not retried', async () => {
+    const f = fixture();
+    let attempts = 0;
+    f.coap.request = async () => {
+        attempts++;
+        return { code: { major: 4, toString: () => '4.00' }, payload: Buffer.from('bad request') };
+    };
+    await assert.rejects(f.device.setStateCoap('pwr', '0', f.device.getSettings()), /rejected: 4.00/);
+    assert.equal(attempts, 1);
+    assert.equal(f.timers.size, 0);
+});
+
+test('deleting a device during retry backoff prevents further command attempts', async () => {
+    const f = fixture();
+    let attempts = 0;
+    f.coap.request = async () => { attempts++; throw new Error('offline'); };
+    const failed = assert.rejects(f.device.setStateCoap('pwr', '0', f.device.getSettings()), /deleted/);
+    await f.flush();
+    f.device.stopAirCoapDevice();
+    await f.advance(1000);
+    await failed;
+    assert.equal(attempts, 1);
+    assert.equal(f.timers.size, 0);
+});
+
+test('a command interrupting a quiet observer does not report a false timeout', async () => {
+    const f = fixture();
+    const observing = f.device.observerAirCoapDevice();
+    await f.flush();
+    assert.equal(f.calls.observe, 1);
+    const command = f.device.setStateCoap('cl', false, f.device.getSettings());
+    await f.flush();
+    await f.advance(2000);
+    await command;
+    await observing;
+    assert.equal(f.calls.errors.length, 0);
+    assert.equal(f.device.coapRetryCount, 0);
+    await f.advance(1000);
+    assert.equal(f.calls.observe, 2);
+    f.device.stopAirCoapDevice();
     await f.flush();
     assert.equal(f.timers.size, 0);
 });
